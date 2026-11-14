@@ -1,0 +1,65 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: devpilot
+      POSTGRES_PASSWORD: devpilot
+      POSTGRES_DB: devpilot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # Host port 5433 (5432 was taken on this Windows machine). Containers still use 5432.
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devpilot -d devpilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    # Not published to the host: only the backend and worker containers need it.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      # Inside Compose, services reach each other by service name, not localhost.
+      DATABASE_URL: postgresql+psycopg://devpilot:devpilot@db:5432/devpilot
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  worker:
+    build: ./backend
+    command: ["worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://devpilot:devpilot@db:5432/devpilot
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        # The backend runs the migrations; wait until it is serving.
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

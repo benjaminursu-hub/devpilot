@@ -1,0 +1,74 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", "compose.yaml", ".github/workflows/backend-ci.yml"]
+  pull_request:
+    paths: ["backend/**", "compose.yaml", ".github/workflows/backend-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: devpilot
+          POSTGRES_PASSWORD: devpilot
+          POSTGRES_DB: devpilot
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U devpilot -d devpilot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+psycopg://devpilot:devpilot@localhost:5432/devpilot
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Migrations apply and roll back on PostgreSQL
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+
+      - name: Tests
+        run: pytest -q
+
+      - name: Export OpenAPI spec
+        run: python scripts/export_openapi.py ../docs/openapi.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openapi
+          path: docs/openapi.json
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t devpilot-backend ./backend
