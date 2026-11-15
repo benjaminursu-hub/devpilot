@@ -90,8 +90,7 @@ npm run dev
 ```
 
 Open <http://localhost:5173>. The frontend talks to `http://localhost:8000` by default (see
-`frontend/.env.example` to change it). The frontend is being redesigned, so a UI walkthrough
-will follow once that's done.
+`frontend/.env.example` to change it).
 
 ## Optional: local AI with Ollama
 
@@ -217,7 +216,7 @@ cd D:\Documents\ChatGPT\devpilot\frontend
 npm run build
 ```
 
-This hasn't been run against the redesigned frontend yet.
+The redesigned failed-run page passed `npm run build` and a fresh end-to-end Ollama test. The analysis went from Queued to Running to Completed without refreshing the page.
 
 ## Current limits
 
